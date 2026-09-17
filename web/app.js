@@ -1,8 +1,39 @@
 const $ = id => document.getElementById(id);
+const AGENT_URL = "http://127.0.0.1:3011";
 
 function setStatus(text, cls = "") {
   $("status").textContent = text;
   $("status").className = "status " + cls;
+}
+
+function setAgent(text, cls = "") {
+  const el = $("agent-status");
+  if (!el) return;
+  el.textContent = text;
+  el.className = "agent-status " + cls;
+}
+
+async function agentFetch(path, options = {}) {
+  const request = new Request(AGENT_URL + path, {
+    ...options,
+    mode: "cors",
+    targetAddressSpace: "loopback"
+  });
+  return fetch(request);
+}
+
+async function checkAgent() {
+  try {
+    const response = await agentFetch("/health", {method: "GET"});
+    if (!response.ok) throw new Error("Local Agent returned HTTP " + response.status);
+    const data = await response.json();
+    if (!data.ok) throw new Error("Local Agent is not ready.");
+    setAgent("LOCAL AGENT: CONNECTED", "agent-ok");
+    return true;
+  } catch (error) {
+    setAgent("LOCAL AGENT: NOT CONNECTED", "agent-err");
+    return false;
+  }
 }
 
 async function runPairing() {
@@ -13,8 +44,6 @@ async function runPairing() {
     setStatus("Please select a STORE.", "err");
     return;
   }
-
-  // No backslash regex is used here.
   if (!/^[0-9]+$/.test(sto)) {
     setStatus("Please enter a valid STO#.", "err");
     return;
@@ -23,10 +52,11 @@ async function runPairing() {
   $("run").disabled = true;
   $("files").textContent = "";
   $("meta").textContent = "";
-  setStatus("Searching Desktop\\Scanner and Desktop\\BXI…", "busy");
+  setStatus("Connecting to the ECOM ICS Local Agent…", "busy");
+  setAgent("LOCAL AGENT: CONNECTING…", "agent-busy");
 
   try {
-    const response = await fetch("/pair", {
+    const response = await agentFetch("/pair", {
       method: "POST",
       headers: {"Content-Type": "application/json"},
       body: JSON.stringify({store, sto})
@@ -54,9 +84,19 @@ async function runPairing() {
     $("meta").textContent =
       decodeURIComponent(response.headers.get("X-Pairing-Summary") || "");
 
+    setAgent("LOCAL AGENT: CONNECTED", "agent-ok");
     setStatus("Pairing complete.\n" + store + "_STO#" + sto + ".xlsx downloaded.", "ok");
   } catch (error) {
-    setStatus(error.message || "Pairing failed.", "err");
+    setAgent("LOCAL AGENT: NOT CONNECTED", "agent-err");
+    const message = String(error && error.message || "");
+    if (/Failed to fetch|NetworkError|fetch/i.test(message)) {
+      setStatus(
+        "Local Agent is not running on this PC.\nStart the ECOM ICS Local Agent, then try again.",
+        "err"
+      );
+    } else {
+      setStatus(message || "Pairing failed.", "err");
+    }
   } finally {
     $("run").disabled = false;
   }
@@ -66,3 +106,6 @@ $("run").addEventListener("click", runPairing);
 $("sto").addEventListener("keydown", event => {
   if (event.key === "Enter") runPairing();
 });
+
+checkAgent();
+setInterval(checkAgent, 10000);

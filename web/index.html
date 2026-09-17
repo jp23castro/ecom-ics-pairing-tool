@@ -10,7 +10,7 @@
 <main class="wrap">
 <section class="card">
 <h1 class="app-title">ECOM ICS Pairing Tool</h1>
-<p class="sub">Select STORE and enter STO#. This test searches the Scanner and BXI folders on this PC automatically.</p>
+<p class="sub">Select STORE and enter STO#. The Local Agent on this PC searches the Scanner and BXI folders automatically.</p>
 <div class="form">
 <label><span>STORE</span><select id="store">
 <option value="">Select store</option>
@@ -28,11 +28,12 @@
 <label><span>STO#</span><input id="sto" inputmode="numeric" placeholder="Enter STO#" autocomplete="off"></label>
 <button id="run">RUN PAIRING</button>
 </div>
+<div id="agent-status" class="agent-status agent-busy">LOCAL AGENT: CHECKING…</div>
 <div id="status" class="status">Ready.</div>
 <div id="files" class="files"></div>
 <div id="meta" class="meta"></div>
 </section>
-<p class="foot">ECOM ICS local website test v13</p>
+<p class="foot">ECOM ICS website • Phase 2 Local Agent</p>
 </main>
 <script src="/app.js"></script>
 </body>
