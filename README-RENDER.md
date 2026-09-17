@@ -36,3 +36,10 @@ The server uses:
 - `process.env.PORT` when provided by Render
 - `0.0.0.0` for cloud binding
 - port `10000` locally when no PORT is supplied
+
+
+## Phase 2 — Local Agent
+
+The public website no longer reads the Render server's Desktop. The browser sends pairing requests to the ECOM ICS Local Agent running on the same Windows PC at `http://127.0.0.1:3011`.
+
+Deploy this updated project after the Local Agent package is installed on a test PC.
