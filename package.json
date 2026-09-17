@@ -1,6 +1,6 @@
 {
-  "name": "ecom-ics-pairing-tool-v8",
-  "version": "8.0.0",
+  "name": "ecom-ics-pairing-tool",
+  "version": "2.0.0",
   "private": true,
   "main": "server.js",
   "scripts": {

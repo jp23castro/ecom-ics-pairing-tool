@@ -353,7 +353,11 @@ function makeWorkbook(result,scanner,bxi,store,sto){
   return XLSX.write(wb,{bookType:"xlsx",type:"buffer",cellStyles:true});
 }
 
-function send(res,code,headers,body){res.writeHead(code,headers);res.end(body);}
+function send(res,code,headers,body){
+  const h={"Permissions-Policy":"loopback-network=(self)",...headers};
+  res.writeHead(code,h);
+  res.end(body);
+}
 function serveStatic(req,res){
   const pathname=req.url.split("?")[0];
   const files={"/": "index.html","/index.html":"index.html","/app.js":"app.js","/styles.css":"styles.css"};
@@ -372,27 +376,9 @@ const server=http.createServer((req,res)=>{
     if(serveStatic(req,res)) return;
   }
   if(req.method==="POST" && req.url.split("?")[0]==="/pair"){
-    let body="";
-    req.on("data",chunk=>body+=chunk);
-    req.on("end",()=>{
-      try{
-        const input=JSON.parse(body||"{}"),store=text(input.store),sto=text(input.sto);
-        if(!ALLOWED_STORES.has(store)) throw Error(`STORE ${store} is not configured.`);
-        if(!/^[0-9]+$/.test(sto)) throw Error("Invalid STO#.");
-        const desktop=path.join(os.homedir(),"Desktop"),sd=path.join(desktop,"Scanner"),bd=path.join(desktop,"BXI");
-        const sf=findFile(sd,store,sto,[".csv",".txt"]),bf=findFile(bd,store,sto,[".xlsx",".xls"]);
-        if(!sf&&!bf) throw Error(`No matching files found.\nScanner: ${sd}\nBXI: ${bd}`);
-        if(!sf) throw Error(`Scanner file not found for STORE ${store}, STO# ${sto}.\nFolder: ${sd}`);
-        if(!bf) throw Error(`BXI file not found for STORE ${store}, STO# ${sto}.\nFolder: ${bd}`);
-        const si=fileInfo(sf),bi=fileInfo(bf);
-        if(!si||!bi||si.store!==bi.store||si.sto!==bi.sto) throw Error("Scanner/BXI filename validation failed.");
-        const scanner=readScanner(path.join(sd,sf)),bxi=readBxi(path.join(bd,bf)),result=pair(bxi,scanner);
-        const buffer=makeWorkbook(result,scanner,bxi,store,sto);
-        const summary=`STORE ${store} • STO# ${sto} • ${result.z.totalItems} barcodes • ${result.z.status}`;
-        return send(res,200,{"Content-Type":"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet","Content-Disposition":`attachment; filename="${store}_STO#${sto}.xlsx"`,"X-Scanner-File":encodeURIComponent(sf),"X-BXI-File":encodeURIComponent(bf),"X-Pairing-Summary":encodeURIComponent(summary),"Content-Length":buffer.length},buffer);
-      }catch(e){return send(res,400,{"Content-Type":"application/json; charset=utf-8"},JSON.stringify({error:e.message||String(e)}));}
-    });
-    return;
+    return send(res,409,{"Content-Type":"application/json; charset=utf-8"},JSON.stringify({
+      error:"Phase 2: pairing is performed by the ECOM ICS Local Agent on this PC."
+    }));
   }
   send(res,404,{"Content-Type":"text/plain; charset=utf-8"},"Not found");
 });
