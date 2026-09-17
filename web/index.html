@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ECOM ICS Pairing Tool</title>
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<main class="wrap">
+<section class="card">
+<h1 class="app-title">ECOM ICS Pairing Tool</h1>
+<p class="sub">Select STORE and enter STO#. This test searches the Scanner and BXI folders on this PC automatically.</p>
+<div class="form">
+<label><span>STORE</span><select id="store">
+<option value="">Select store</option>
+<option value="169">169 CLN SHOPIFY</option>
+<option value="139">139 SOFAB SHOPIFY</option>
+<option value="090">090 CII SHOPIFY</option>
+<option value="230">230 MATTHEWS SHOPIFY</option>
+<option value="005">005 TRAFFIC</option>
+<option value="360">360 CLN SHOPEE</option>
+<option value="099">099 CII SHOPEE</option>
+<option value="304">304 SOFAB SHOPEE</option>
+<option value="361">361 CLN ZALORA</option>
+<option value="421">421 CLN TIKTOK</option>
+</select></label>
+<label><span>STO#</span><input id="sto" inputmode="numeric" placeholder="Enter STO#" autocomplete="off"></label>
+<button id="run">RUN PAIRING</button>
+</div>
+<div id="status" class="status">Ready.</div>
+<div id="files" class="files"></div>
+<div id="meta" class="meta"></div>
+</section>
+<p class="foot">ECOM ICS local website test v13</p>
+</main>
+<script src="/app.js"></script>
+</body>
+</html>

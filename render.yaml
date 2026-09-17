@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: ecom-ics-pairing-tool
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
