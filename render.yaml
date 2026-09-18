@@ -3,5 +3,14 @@ services:
     name: ecom-ics-pairing-tool
     runtime: node
     plan: free
+
+    buildFilter:
+      paths:
+        - web/**
+        - server.js
+        - package.json
+        - package-lock.json
+        - render.yaml
+
     buildCommand: npm install
     startCommand: npm start
