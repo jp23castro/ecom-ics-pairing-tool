@@ -24,47 +24,69 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $source = "$env:GITHUB_WORKSPACE\\local-agent-installer"
-          $staging = "$env:GITHUB_WORKSPACE\\local-agent-installer\\staging"
-          $runtime = "$staging\\runtime"
+
+          $source = "$env:GITHUB_WORKSPACE\local-agent-installer"
+          $staging = "$env:GITHUB_WORKSPACE\local-agent-installer\staging"
+          $runtime = "$staging\runtime"
 
           Remove-Item $staging -Recurse -Force -ErrorAction SilentlyContinue
           New-Item -ItemType Directory -Force -Path $runtime | Out-Null
 
-          Copy-Item "$source\\server.js" $staging -Force
-          Copy-Item "$source\\package.json" $staging -Force
-          Copy-Item "$source\\launch-agent.vbs" $staging -Force
+          Copy-Item "$source\server.js" $staging -Force
+          Copy-Item "$source\package.json" $staging -Force
+          Copy-Item "$source\launch-agent.vbs" $staging -Force
 
           Push-Location $staging
           try {
             npm install --omit=dev --ignore-scripts
+
+            if (-not (Test-Path "$staging\node_modules\xlsx-js-style")) {
+              throw "xlsx-js-style was not installed correctly."
+            }
+
+            Write-Host "xlsx-js-style package found."
           }
           finally {
             Pop-Location
           }
 
           $nodeVersion = '24.19.0'
-          $zip = "$env:RUNNER_TEMP\\node-v$nodeVersion-win-x64.zip"
+          $zip = "$env:RUNNER_TEMP\node-v$nodeVersion-win-x64.zip"
           $url = "https://nodejs.org/dist/v$nodeVersion/node-v$nodeVersion-win-x64.zip"
-          $extract = "$env:RUNNER_TEMP\\node-extract"
+          $extract = "$env:RUNNER_TEMP\node-extract"
 
           Invoke-WebRequest -Uri $url -OutFile $zip
+
           Remove-Item $extract -Recurse -Force -ErrorAction SilentlyContinue
           Expand-Archive -Path $zip -DestinationPath $extract -Force
-          Copy-Item "$extract\\node-v$nodeVersion-win-x64\\node.exe" "$runtime\\node.exe" -Force
 
-          & "$runtime\\node.exe" --version
-          & "$runtime\\node.exe" -e "require('./node_modules/xlsx-js-style'); console.log('xlsx-js-style OK')"
+          Copy-Item `
+            "$extract\node-v$nodeVersion-win-x64\node.exe" `
+            "$runtime\node.exe" `
+            -Force
+
+          & "$runtime\node.exe" --version
+
+          Push-Location $staging
+          try {
+            & "$runtime\node.exe" -e "require('xlsx-js-style'); console.log('xlsx-js-style OK')"
+          }
+          finally {
+            Pop-Location
+          }
 
       - name: Compile Windows installer
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
+
           $iscc = 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
+
           if (-not (Test-Path $iscc)) {
             throw "Inno Setup 6 compiler not found at $iscc"
           }
-          & $iscc "$env:GITHUB_WORKSPACE\\local-agent-installer\\ECOM-ICS-Local-Agent.iss"
+
+          & $iscc "$env:GITHUB_WORKSPACE\local-agent-installer\ECOM-ICS-Local-Agent.iss"
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
