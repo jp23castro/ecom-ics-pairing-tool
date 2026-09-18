@@ -36,7 +36,7 @@ Name: "{autodesktop}\\ECOM ICS Local Agent"; Filename: "{app}\\launch-agent.vbs"
 Name: "desktopicon"; Description: "Create a desktop shortcut"; Flags: unchecked
 
 [Run]
-Filename: "wscript.exe"; Parameters: "\"{app}\\launch-agent.vbs\""; Flags: nowait postinstall skipifsilent
+Filename: "wscript.exe"; Parameters: """{app}\\launch-agent.vbs"""; Flags: nowait postinstall skipifsilent
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}"
