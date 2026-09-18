@@ -370,10 +370,12 @@ function serveStatic(req,res){
 }
 
 const ALLOWED_RENDER_ORIGIN = /^https:\/\/([a-z0-9-]+\.)*onrender\.com$/i;
+const ALLOWED_NETLIFY_ORIGIN = "https://regal-arithmetic-0b09b7.netlify.app";
 
 function allowedOrigin(origin){
   if(!origin) return "*";
   if(origin === "http://localhost:3034" || origin === "http://127.0.0.1:3034") return origin;
+  if(origin === ALLOWED_NETLIFY_ORIGIN) return origin;
   return ALLOWED_RENDER_ORIGIN.test(origin) ? origin : "";
 }
 
