@@ -1,0 +1,74 @@
+name: Build ECOM ICS Local Agent Installer
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'local-agent-installer/**'
+      - '.github/workflows/build-local-agent-installer.yml'
+
+jobs:
+  build-windows-installer:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js for dependency installation
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+
+      - name: Prepare installer staging
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $source = "$env:GITHUB_WORKSPACE\\local-agent-installer"
+          $staging = "$env:GITHUB_WORKSPACE\\local-agent-installer\\staging"
+          $runtime = "$staging\\runtime"
+
+          Remove-Item $staging -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force -Path $runtime | Out-Null
+
+          Copy-Item "$source\\server.js" $staging -Force
+          Copy-Item "$source\\package.json" $staging -Force
+          Copy-Item "$source\\launch-agent.vbs" $staging -Force
+
+          Push-Location $staging
+          try {
+            npm install --omit=dev --ignore-scripts
+          }
+          finally {
+            Pop-Location
+          }
+
+          $nodeVersion = '24.19.0'
+          $zip = "$env:RUNNER_TEMP\\node-v$nodeVersion-win-x64.zip"
+          $url = "https://nodejs.org/dist/v$nodeVersion/node-v$nodeVersion-win-x64.zip"
+          $extract = "$env:RUNNER_TEMP\\node-extract"
+
+          Invoke-WebRequest -Uri $url -OutFile $zip
+          Remove-Item $extract -Recurse -Force -ErrorAction SilentlyContinue
+          Expand-Archive -Path $zip -DestinationPath $extract -Force
+          Copy-Item "$extract\\node-v$nodeVersion-win-x64\\node.exe" "$runtime\\node.exe" -Force
+
+          & "$runtime\\node.exe" --version
+          & "$runtime\\node.exe" -e "require('./node_modules/xlsx-js-style'); console.log('xlsx-js-style OK')"
+
+      - name: Compile Windows installer
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $iscc = 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
+          if (-not (Test-Path $iscc)) {
+            throw "Inno Setup 6 compiler not found at $iscc"
+          }
+          & $iscc "$env:GITHUB_WORKSPACE\\local-agent-installer\\ECOM-ICS-Local-Agent.iss"
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ECOM-ICS-Local-Agent-Setup
+          path: local-agent-installer/output/ECOM-ICS-Local-Agent-Setup.exe
+          if-no-files-found: error
