@@ -370,7 +370,7 @@ function serveStatic(req,res){
 }
 
 const ALLOWED_RENDER_ORIGIN = /^https:\/\/([a-z0-9-]+\.)*onrender\.com$/i;
-const ALLOWED_NETLIFY_ORIGIN = "https://regal-arithmetic-0b09b7.netlify.app";
+const ALLOWED_NETLIFY_ORIGIN = "https://ecom-ics-pairing.netlify.app";
 
 function allowedOrigin(origin){
   if(!origin) return "*";
