@@ -26,7 +26,7 @@ ArchitecturesInstallIn64BitMode=x64
 Source: "staging\\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Registry]
-Root: HKCU; Subkey: "Software\\Microsoft\\Windows\\CurrentVersion\\Run"; ValueType: string; ValueName: "ECOM ICS Local Agent"; ValueData: "wscript.exe \"{app}\\launch-agent.vbs\""; Flags: uninsdeletevalue
+Root: HKCU; Subkey: "Software\\Microsoft\\Windows\\CurrentVersion\\Run"; ValueType: string; ValueName: "ECOM ICS Local Agent"; ValueData: "wscript.exe ""{app}\\launch-agent.vbs"""; Flags: uninsdeletevalue
 
 [Icons]
 Name: "{group}\\ECOM ICS Local Agent"; Filename: "{app}\\launch-agent.vbs"
