@@ -1,79 +1,92 @@
-name: Build ECOM ICS Local Agent Windows 7 Installer
+name: Build Windows 7 Legacy Installer
 
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - "local-agent-installer/**"
+      - ".github/workflows/build-local-agent-installer-win7-legacy.yml"
 
 jobs:
-  build-windows7-installer:
+  build-windows7-legacy-installer:
     runs-on: windows-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v7
 
-      - name: Set up Node.js for dependency installation
+      - name: Setup Node 24 for build tools
         uses: actions/setup-node@v7
         with:
-          node-version: '24.19.0'
+          node-version: "24.19.0"
+          cache: npm
+          cache-dependency-path: local-agent-installer/package.json
 
-      - name: Prepare Windows 7 staging
+      - name: Prepare staging folder
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $source = "$env:GITHUB_WORKSPACE\local-agent-installer"
+          $staging = Join-Path $env:GITHUB_WORKSPACE 'local-agent-installer\win7-staging'
+          if (Test-Path $staging) { Remove-Item $staging -Recurse -Force }
+          New-Item -ItemType Directory -Force -Path $staging | Out-Null
+          Copy-Item 'local-agent-installer\server.js' $staging -Force
+          Copy-Item 'local-agent-installer\package.json' $staging -Force
+          Copy-Item 'local-agent-installer\launch-agent.vbs' $staging -Force
+
+      - name: Install application dependency
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Push-Location "$env:GITHUB_WORKSPACE\local-agent-installer\win7-staging"
+          npm install --omit=dev
+          Pop-Location
+
+      - name: Download Node.js 8.17.0 x64 runtime
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $url = 'https://nodejs.org/dist/v8.17.0/node-v8.17.0-win-x64.zip'
+          $zip = Join-Path $env:RUNNER_TEMP 'node-v8.17.0-win-x64.zip'
+          $runtimeRoot = Join-Path $env:RUNNER_TEMP 'node8'
+          Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $zip
+          if (Test-Path $runtimeRoot) { Remove-Item $runtimeRoot -Recurse -Force }
+          Expand-Archive -Path $zip -DestinationPath $runtimeRoot -Force
+          $nodeExe = Get-ChildItem $runtimeRoot -Recurse -Filter node.exe | Select-Object -First 1
+          if (-not $nodeExe) { throw 'Node.js 8.17.0 node.exe was not found after extraction.' }
+          New-Item -ItemType Directory -Force -Path "$env:GITHUB_WORKSPACE\local-agent-installer\win7-staging\runtime" | Out-Null
+          Copy-Item $nodeExe.FullName "$env:GITHUB_WORKSPACE\local-agent-installer\win7-staging\runtime\node.exe" -Force
+
+      - name: Validate legacy source with Node 8
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
           $staging = "$env:GITHUB_WORKSPACE\local-agent-installer\win7-staging"
-          $runtime = "$staging\runtime"
-
-          Remove-Item $staging -Recurse -Force -ErrorAction SilentlyContinue
-          New-Item -ItemType Directory -Force -Path $runtime | Out-Null
-
-          Copy-Item "$source\server.js" $staging -Force
-          Copy-Item "$source\package.json" $staging -Force
-          Copy-Item "$source\launch-agent.vbs" $staging -Force
-
+          & "$staging\runtime\node.exe" --version
+          if ($LASTEXITCODE -ne 0) { throw 'Node.js 8 runtime failed to start on the build runner.' }
+          & "$staging\runtime\node.exe" --check "$staging\server.js"
+          if ($LASTEXITCODE -ne 0) { throw 'Legacy server.js failed Node.js 8 syntax validation.' }
           Push-Location $staging
-          try {
-            npm install --omit=dev --ignore-scripts
-          }
-          finally {
-            Pop-Location
-          }
+          & .\runtime\node.exe -e "var x=require('xlsx-js-style'); console.log('xlsx-js-style loaded:', require('xlsx-js-style/package.json').version);"
+          if ($LASTEXITCODE -ne 0) { throw 'xlsx-js-style could not be loaded by Node.js 8.' }
+          Pop-Location
 
-          # Legacy Windows 7 runtime. x86 runs on both Windows 7 32-bit
-          # and Windows 7 64-bit (WoW64).
-          $nodeVersion = '14.21.3'
-          $zip = "$env:RUNNER_TEMP\node-v$nodeVersion-win-x86.zip"
-          $url = "https://nodejs.org/dist/v$nodeVersion/node-v$nodeVersion-win-x86.zip"
-          $extract = "$env:RUNNER_TEMP\node14-x86-extract"
-
-          Invoke-WebRequest -Uri $url -OutFile $zip
-          Remove-Item $extract -Recurse -Force -ErrorAction SilentlyContinue
-          Expand-Archive -Path $zip -DestinationPath $extract -Force
-
-          Copy-Item "$extract\node-v$nodeVersion-win-x86\node.exe" "$runtime\node.exe" -Force
-          & "$runtime\node.exe" --version
-
-          Push-Location $staging
-          try {
-            & "$runtime\node.exe" -e "require('./node_modules/xlsx-js-style'); console.log('xlsx-js-style OK')"
-          }
-          finally {
-            Pop-Location
-          }
-
-      - name: Compile Windows 7 installer
+      - name: Install Inno Setup
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $iscc = 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
-          if (-not (Test-Path $iscc)) {
-            throw "Inno Setup 6 compiler not found at $iscc"
-          }
-          & $iscc "$env:GITHUB_WORKSPACE\local-agent-installer\win7-installer.iss"
+          choco install innosetup --no-progress -y
 
-      - name: Upload Windows 7 installer
+      - name: Compile Windows 7 Legacy installer
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $iss = "$env:GITHUB_WORKSPACE\local-agent-installer\win7-installer.iss"
+          & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' $iss
+          if ($LASTEXITCODE -ne 0) { throw 'Inno Setup compilation failed.' }
+
+      - name: Upload installer artifact
         uses: actions/upload-artifact@v7
         with:
-          name: ECOM-ICS-Local-Agent-Windows7-Setup
-          path: local-agent-installer/output/ECOM-ICS-Local-Agent-Windows7-Setup.exe
+          name: ECOM-ICS-Local-Agent-Windows7-Legacy-Setup
+          path: local-agent-installer/output/ECOM-ICS-Local-Agent-Windows7-Legacy-Setup.exe
           if-no-files-found: error
