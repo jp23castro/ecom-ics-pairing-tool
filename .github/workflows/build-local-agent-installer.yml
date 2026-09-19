@@ -53,8 +53,15 @@ jobs:
           Expand-Archive -Path $zip -DestinationPath $extract -Force
           Copy-Item "$extract\\node-v$nodeVersion-win-x64\\node.exe" "$runtime\\node.exe" -Force
 
-          & "$runtime\\node.exe" --version
-          & "$runtime\\node.exe" -e "require('./node_modules/xlsx-js-style'); console.log('xlsx-js-style OK')"
+          & "$runtime\node.exe" --version
+
+          Push-Location $staging
+          try {
+            & "$runtime\node.exe" -e "require('./node_modules/xlsx-js-style'); console.log('xlsx-js-style OK')"
+          }
+          finally {
+            Pop-Location
+          }
 
       - name: Compile Windows installer
         shell: pwsh
