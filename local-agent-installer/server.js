@@ -47,7 +47,23 @@ function csvLine(line){
 }
 function decode(buffer){
   const b=new Uint8Array(buffer);
-  if(b.length>=2 && b[0]===255 && b[1]===254) return new TextDecoder("utf-16le").decode(b.slice(2));
+
+  // UTF-16LE with BOM.
+  if(b.length>=2 && b[0]===255 && b[1]===254){
+    return new TextDecoder("utf-16le").decode(b.slice(2));
+  }
+
+  // Some Scanner TXT exports are UTF-16LE WITHOUT a BOM.
+  // Detect the common UTF-16LE pattern (ASCII byte followed by 0x00)
+  // so the header is decoded as BARCODE,QTY,... instead of B\0A\0R\0...
+  if(
+    b.length>=4 &&
+    b[1]===0 &&
+    b[3]===0
+  ){
+    return new TextDecoder("utf-16le").decode(b);
+  }
+
   return new TextDecoder("utf-8").decode(b).replace(/^\uFEFF/,"");
 }
 function description(v){
