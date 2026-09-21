@@ -1,4 +1,4 @@
-name: Build Windows 7 Legacy Installer
+name: Build Windows 7 Legacy Installer (Node 6)
 
 on:
   workflow_dispatch:
@@ -41,33 +41,33 @@ jobs:
           npm install --omit=dev
           Pop-Location
 
-      - name: Download Node.js 8.17.0 x64 runtime
+      - name: Download Node.js 6.17.1 x64 runtime
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $url = 'https://nodejs.org/dist/v8.17.0/node-v8.17.0-win-x64.zip'
-          $zip = Join-Path $env:RUNNER_TEMP 'node-v8.17.0-win-x64.zip'
-          $runtimeRoot = Join-Path $env:RUNNER_TEMP 'node8'
+          $url = 'https://nodejs.org/dist/v6.17.1/node-v6.17.1-win-x64.zip'
+          $zip = Join-Path $env:RUNNER_TEMP 'node-v6.17.1-win-x64.zip'
+          $runtimeRoot = Join-Path $env:RUNNER_TEMP 'node6'
           Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $zip
           if (Test-Path $runtimeRoot) { Remove-Item $runtimeRoot -Recurse -Force }
           Expand-Archive -Path $zip -DestinationPath $runtimeRoot -Force
           $nodeExe = Get-ChildItem $runtimeRoot -Recurse -Filter node.exe | Select-Object -First 1
-          if (-not $nodeExe) { throw 'Node.js 8.17.0 node.exe was not found after extraction.' }
+          if (-not $nodeExe) { throw 'Node.js 6.17.1 node.exe was not found after extraction.' }
           New-Item -ItemType Directory -Force -Path "$env:GITHUB_WORKSPACE\local-agent-installer\win7-staging\runtime" | Out-Null
           Copy-Item $nodeExe.FullName "$env:GITHUB_WORKSPACE\local-agent-installer\win7-staging\runtime\node.exe" -Force
 
-      - name: Validate legacy source with Node 8
+      - name: Validate legacy source with Node 6
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
           $staging = "$env:GITHUB_WORKSPACE\local-agent-installer\win7-staging"
           & "$staging\runtime\node.exe" --version
-          if ($LASTEXITCODE -ne 0) { throw 'Node.js 8 runtime failed to start on the build runner.' }
+          if ($LASTEXITCODE -ne 0) { throw 'Node.js 6 runtime failed to start on the build runner.' }
           & "$staging\runtime\node.exe" --check "$staging\server.js"
-          if ($LASTEXITCODE -ne 0) { throw 'Legacy server.js failed Node.js 8 syntax validation.' }
+          if ($LASTEXITCODE -ne 0) { throw 'Legacy server.js failed Node.js 6 syntax validation.' }
           Push-Location $staging
           & .\runtime\node.exe -e "var x=require('xlsx-js-style'); console.log('xlsx-js-style loaded:', require('xlsx-js-style/package.json').version);"
-          if ($LASTEXITCODE -ne 0) { throw 'xlsx-js-style could not be loaded by Node.js 8.' }
+          if ($LASTEXITCODE -ne 0) { throw 'xlsx-js-style could not be loaded by Node.js 6.' }
           Pop-Location
 
       - name: Install Inno Setup
@@ -83,6 +83,13 @@ jobs:
           $iss = "$env:GITHUB_WORKSPACE\local-agent-installer\win7-installer.iss"
           & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' $iss
           if ($LASTEXITCODE -ne 0) { throw 'Inno Setup compilation failed.' }
+          $expected = Join-Path $env:GITHUB_WORKSPACE 'local-agent-installer\output\ECOM-ICS-Local-Agent-Windows7-Legacy-Setup.exe'
+          $expectedDir = Split-Path $expected -Parent
+          New-Item -ItemType Directory -Force -Path $expectedDir | Out-Null
+          $matches = Get-ChildItem $env:GITHUB_WORKSPACE -Recurse -File -Filter 'ECOM-ICS-Local-Agent-Windows7-Legacy-Setup.exe' | Where-Object { $_.FullName -ne $expected }
+          if ($matches.Count -eq 0) { throw 'Installer EXE was not found after Inno Setup compilation.' }
+          Copy-Item $matches[0].FullName $expected -Force
+          Write-Host "Installer staged for artifact upload: $expected"
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@v7
