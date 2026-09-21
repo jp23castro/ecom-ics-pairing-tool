@@ -26,217 +26,97 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
+          $staging = "$env:GITHUB_WORKSPACE\local-agent-installer\win7-staging"
+          if (Test-Path $staging) { Remove-Item $staging -Recurse -Force }
+          New-Item -ItemType Directory -Force -Path $staging | Out-Null
+          Copy-Item "$env:GITHUB_WORKSPACE\local-agent-installer\server.js" "$staging\server.js" -Force
+          Copy-Item "$env:GITHUB_WORKSPACE\local-agent-installer\package.json" "$staging\package.json" -Force
+          Copy-Item "$env:GITHUB_WORKSPACE\local-agent-installer\launch-agent.vbs" "$staging\launch-agent.vbs" -Force
 
-          $staging = Join-Path `
-            $env:GITHUB_WORKSPACE `
-            'local-agent-installer\win7-staging'
-
-          if (Test-Path $staging) {
-            Remove-Item $staging -Recurse -Force
+      - name: Verify Node 6 compatible server source
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $server = Get-Content "$env:GITHUB_WORKSPACE\local-agent-installer\server.js" -Raw
+          if ($server -match '\|\|=|&&=|\?\?=') {
+            throw 'server.js still contains logical assignment syntax that Node 6 cannot parse.'
           }
-
-          New-Item `
-            -ItemType Directory `
-            -Force `
-            -Path $staging | Out-Null
-
-          Copy-Item `
-            'local-agent-installer\server.js' `
-            $staging `
-            -Force
-
-          Copy-Item `
-            'local-agent-installer\package.json' `
-            $staging `
-            -Force
-
-          Copy-Item `
-            'local-agent-installer\launch-agent.vbs' `
-            $staging `
-            -Force
+          Write-Host 'Node 6-compatible server source check passed.'
 
       - name: Install application dependency
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-
-          Push-Location `
-            "$env:GITHUB_WORKSPACE\local-agent-installer\win7-staging"
-
+          Push-Location "$env:GITHUB_WORKSPACE\local-agent-installer\win7-staging"
           npm install --omit=dev
-
           Pop-Location
 
-      - name: Download Node.js 6.17.1 x64 runtime
+      - name: Download exact official Node.js 6.17.1 x64 binary
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
+          $url = 'https://nodejs.org/dist/v6.17.1/win-x64/node.exe'
+          $nodeExe = Join-Path $env:RUNNER_TEMP 'node-v6.17.1-win-x64.exe'
+          $expectedSha256 = '6639e047318e21dc1c5077325d8be24a9ca7462a53c202bb6c8c7ac08e5bdd59'
 
-          $url = `
-            'https://nodejs.org/dist/v6.17.1/node-v6.17.1-win-x64.zip'
+          Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $nodeExe
 
-          $zip = `
-            Join-Path `
-            $env:RUNNER_TEMP `
-            'node-v6.17.1-win-x64.zip'
+          $actualSha256 = (Get-FileHash $nodeExe -Algorithm SHA256).Hash.ToLowerInvariant()
+          Write-Host "Downloaded Node SHA256: $actualSha256"
 
-          $runtimeRoot = `
-            Join-Path `
-            $env:RUNNER_TEMP `
-            'node6'
-
-          Invoke-WebRequest `
-            -UseBasicParsing `
-            -Uri $url `
-            -OutFile $zip
-
-          if (Test-Path $runtimeRoot) {
-            Remove-Item $runtimeRoot -Recurse -Force
+          if ($actualSha256 -ne $expectedSha256) {
+            throw "Node.js 6.17.1 SHA256 mismatch. Expected $expectedSha256 but got $actualSha256."
           }
 
-          Expand-Archive `
-            -Path $zip `
-            -DestinationPath $runtimeRoot `
-            -Force
+          $runtime = "$env:GITHUB_WORKSPACE\local-agent-installer\win7-staging\runtime"
+          New-Item -ItemType Directory -Force -Path $runtime | Out-Null
+          Copy-Item $nodeExe "$runtime\node.exe" -Force
 
-          $nodeExe = `
-            Get-ChildItem `
-            $runtimeRoot `
-            -Recurse `
-            -Filter 'node.exe' |
-            Select-Object -First 1
-
-          if (-not $nodeExe) {
-            throw `
-              'Node.js 6.17.1 node.exe was not found after extraction.'
+          $stagedSha256 = (Get-FileHash "$runtime\node.exe" -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($stagedSha256 -ne $expectedSha256) {
+            throw 'Staged Node.js runtime hash does not match the official Node.js 6.17.1 x64 binary.'
           }
 
-          $runtimeDir = `
-            "$env:GITHUB_WORKSPACE\local-agent-installer\win7-staging\runtime"
-
-          New-Item `
-            -ItemType Directory `
-            -Force `
-            -Path $runtimeDir | Out-Null
-
-          Copy-Item `
-            $nodeExe.FullName `
-            "$runtimeDir\node.exe" `
-            -Force
-
-      - name: Validate legacy source with Node 6
+      - name: Validate exact Node 6 runtime and application
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-
-          $staging = `
-            "$env:GITHUB_WORKSPACE\local-agent-installer\win7-staging"
-
+          $staging = "$env:GITHUB_WORKSPACE\local-agent-installer\win7-staging"
           $node = "$staging\runtime\node.exe"
 
           & $node --version
-
-          if ($LASTEXITCODE -ne 0) {
-            throw `
-              'Node.js 6 runtime failed to start on the build runner.'
-          }
+          if ($LASTEXITCODE -ne 0) { throw 'Node.js 6 runtime failed to start on the build runner.' }
 
           & $node --check "$staging\server.js"
-
-          if ($LASTEXITCODE -ne 0) {
-            throw `
-              'Legacy server.js failed Node.js 6 syntax validation.'
-          }
+          if ($LASTEXITCODE -ne 0) { throw 'server.js failed Node.js 6 syntax validation.' }
 
           Push-Location $staging
-
-          & $node -e `
-            "var x=require('xlsx-js-style'); console.log('xlsx-js-style loaded:', require('xlsx-js-style/package.json').version);"
-
-          if ($LASTEXITCODE -ne 0) {
-            throw `
-              'xlsx-js-style could not be loaded by Node.js 6.'
-          }
-
+          & $node -e "require('xlsx-js-style'); console.log('xlsx-js-style loaded successfully');"
+          if ($LASTEXITCODE -ne 0) { throw 'xlsx-js-style could not be loaded by Node.js 6.' }
           Pop-Location
 
       - name: Install Inno Setup
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-
           choco install innosetup --no-progress -y
 
       - name: Compile Windows 7 Legacy installer
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
+          $iss = "$env:GITHUB_WORKSPACE\local-agent-installer\win7-installer.iss"
+          & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' $iss
+          if ($LASTEXITCODE -ne 0) { throw 'Inno Setup compilation failed.' }
 
-          $iss = `
-            "$env:GITHUB_WORKSPACE\local-agent-installer\win7-installer.iss"
+          $outputDir = "$env:GITHUB_WORKSPACE\local-agent-installer\output"
+          $final = "$outputDir\ECOM-ICS-Local-Agent-Windows7-Legacy-Setup.exe"
 
-          & `
-            'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' `
-            $iss
-
-          if ($LASTEXITCODE -ne 0) {
-            throw 'Inno Setup compilation failed.'
+          if (-not (Test-Path $final)) {
+            throw "Expected installer was not created: $final"
           }
 
-          $outputDir = `
-            "$env:GITHUB_WORKSPACE\local-agent-installer\output"
-
-          New-Item `
-            -ItemType Directory `
-            -Force `
-            -Path $outputDir | Out-Null
-
-          # Inno Setup currently produces this filename.
-          $compiledInstaller = `
-            Join-Path `
-            $outputDir `
-            'ECOM-ICS-Local-Agent-Windows7-Setup.exe'
-
-          # Final artifact filename.
-          $finalInstaller = `
-            Join-Path `
-            $outputDir `
-            'ECOM-ICS-Local-Agent-Windows7-Legacy-Setup.exe'
-
-          if (-not (Test-Path $compiledInstaller)) {
-
-            # Fallback: search the workspace for the installer.
-            $matches = `
-              Get-ChildItem `
-              $env:GITHUB_WORKSPACE `
-              -Recurse `
-              -File `
-              -Filter 'ECOM-ICS-Local-Agent-Windows7-Setup.exe'
-
-            if ($matches.Count -eq 0) {
-              throw `
-                'Installer EXE was not found after Inno Setup compilation.'
-            }
-
-            $compiledInstaller = $matches[0].FullName
-          }
-
-          Copy-Item `
-            $compiledInstaller `
-            $finalInstaller `
-            -Force
-
-          if (-not (Test-Path $finalInstaller)) {
-            throw `
-              'Final Windows 7 Legacy installer was not created.'
-          }
-
-          Write-Host ''
-          Write-Host '============================================='
-          Write-Host 'Windows 7 Legacy installer created:'
-          Write-Host $finalInstaller
-          Write-Host '============================================='
-          Write-Host ''
+          Write-Host "Installer created: $final"
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@v7
