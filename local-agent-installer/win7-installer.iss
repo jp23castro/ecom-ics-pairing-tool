@@ -1,23 +1,24 @@
 #define MyAppName "ECOM ICS Local Agent"
-#define MyAppVersion "3.0.0-win7"
+#define MyAppVersion "3.1.1-win7"
 #define MyAppPublisher "ECOM ICS"
 
 [Setup]
-AppId={{E4C4E2B7-7C61-4E0D-9C2D-ECOMICSWIN7}}
-AppName={#MyAppName} (Windows 7)
+AppId={{E4C4E2B7-7C61-4E0D-9C2D-ECOMICSWIN7-LEGACY}}
+AppName={#MyAppName} (Windows 7 Legacy)
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
-DefaultDirName={pf}\ECOM ICS Local Agent
+DefaultDirName={autopf}\ECOM ICS Local Agent
 DisableProgramGroupPage=yes
 PrivilegesRequired=admin
 OutputDir=output
-OutputBaseFilename=ECOM-ICS-Local-Agent-Windows7-Setup
+OutputBaseFilename=ECOM-ICS-Local-Agent-Windows7-Legacy-Setup
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
 MinVersion=6.1sp1
-ArchitecturesAllowed=x86 x64
-UninstallDisplayName=ECOM ICS Local Agent (Windows 7)
+ArchitecturesAllowed=x64compatible
+ArchitecturesInstallIn64BitMode=x64compatible
+UninstallDisplayName=ECOM ICS Local Agent (Windows 7 Legacy)
 
 [Files]
 Source: "win7-staging\server.js"; DestDir: "{app}"; Flags: ignoreversion
