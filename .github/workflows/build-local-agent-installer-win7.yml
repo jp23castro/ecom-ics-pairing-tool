@@ -57,7 +57,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $url = 'https://nodejs.org/dist/v6.17.1/win-x64/node.exe'
           $nodeExe = Join-Path $env:RUNNER_TEMP 'node-v6.17.1-win-x64.exe'
-          $expectedSha256 = '6639e047318e21dc1c5077325d8be24a9ca7462a53c202bb6c8c7ac08e5bdd59'
+          $expectedSha256 = "6639e047318e21dc1c5077325d8be24a9ca7465e40f4d9fc568859516352f047"
 
           Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $nodeExe
 
