@@ -20,6 +20,11 @@ Copy-Item (Join-Path $temp "node-v$nodeVersion-win-x64\\node.exe") $runtime -For
 
 Copy-Item (Join-Path $root 'server.js') $staging -Force
 Copy-Item (Join-Path $root 'scanner-csv.js') $staging -Force
+if (!(Test-Path (Join-Path $staging 'scanner-csv.js'))) {
+    throw "ERROR: scanner-csv.js was not copied to staging."
+}
+
+Write-Host "VERIFIED: scanner-csv.js exists in staging."
 Copy-Item (Join-Path $root 'package.json') $staging -Force
 Copy-Item (Join-Path $root 'launch-agent.vbs') $staging -Force
 
