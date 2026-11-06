@@ -32,8 +32,15 @@ jobs:
           New-Item -ItemType Directory -Force -Path $runtime | Out-Null
 
           Copy-Item "$source\\server.js" $staging -Force
+          Copy-Item "$source\\scanner-csv.js" $staging -Force
           Copy-Item "$source\\package.json" $staging -Force
           Copy-Item "$source\\launch-agent.vbs" $staging -Force
+
+          if (!(Test-Path "$staging\\scanner-csv.js")) {
+            throw "ERROR: scanner-csv.js was not copied to staging."
+          }
+
+          Write-Host "VERIFIED: scanner-csv.js exists in staging."
 
           Push-Location $staging
           try {
