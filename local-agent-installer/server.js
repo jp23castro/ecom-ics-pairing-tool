@@ -3,8 +3,9 @@ const fs = require("fs");
 const path = require("path");
 const os = require("os");
 const XLSX = require("xlsx-js-style");
+const { saveScannerCsv } = require("./scanner-csv");
 
-const PORT = 3011;
+const PORT = 3012;
 const ROOT = __dirname;
 const WEB = path.join(ROOT, "web");
 const ALLOWED_STORES = new Set(["139","304","360","361","421","005","230","090","099","169"]);
@@ -46,10 +47,25 @@ function csvLine(line){
   out.push(cur); return out;
 }
 function decode(buffer){
-  var b=Buffer.from(buffer);
-  if(b.length>=2 && b[0]===255 && b[1]===254) return b.slice(2).toString("utf16le");
-  if(b.length>=4 && b[1]===0 && b[3]===0) return b.toString("utf16le");
-  return b.toString("utf8").replace(/^\uFEFF/,"");
+  const b=new Uint8Array(buffer);
+
+  // UTF-16LE with BOM.
+  if(b.length>=2 && b[0]===255 && b[1]===254){
+    return new TextDecoder("utf-16le").decode(b.slice(2));
+  }
+
+  // Some Scanner TXT exports are UTF-16LE WITHOUT a BOM.
+  // Detect the common UTF-16LE pattern (ASCII byte followed by 0x00)
+  // so the header is decoded as BARCODE,QTY,... instead of B\0A\0R\0...
+  if(
+    b.length>=4 &&
+    b[1]===0 &&
+    b[3]===0
+  ){
+    return new TextDecoder("utf-16le").decode(b);
+  }
+
+  return new TextDecoder("utf-8").decode(b).replace(/^\uFEFF/,"");
 }
 function description(v){
   const m=text(v).match(/^(.+?)\s*\((.+?)-(.+?)\)\s*$/);
@@ -91,7 +107,7 @@ function aggregate(records, details){
   const map={};
   for(const r of records){
     if(!map[r.barcode]) map[r.barcode]={barcode:r.barcode,stockNo:details?text(r.stockNo):"",color:details?text(r.color):"",size:details?text(r.size):"",quantity:num(r.quantity),occurrences:1,scientificNotation:!!r.scientificNotation};
-    else { map[r.barcode].quantity+=num(r.quantity); map[r.barcode].occurrences++; map[r.barcode].scientificNotation = map[r.barcode].scientificNotation || !!r.scientificNotation; }
+    else { map[r.barcode].quantity+=num(r.quantity); map[r.barcode].occurrences++; map[r.barcode].scientificNotation ||= !!r.scientificNotation; }
   }
   return map;
 }
@@ -108,7 +124,7 @@ function pair(bxi, scanner){
     if(x&&y&&sq!==bq){parts.push("QTY DIFFERENCE");z.qtyDifference++;}
     if(x&&x.occurrences>1){parts.push("DUPLICATE SCANNER");z.duplicateScanner++;}
     if(y&&y.occurrences>1){parts.push("DUPLICATE BXI");z.duplicateBxi++;}
-    if((x && x.scientificNotation)||(y && y.scientificNotation)){parts.push("BARCODE FORMAT WARNING");z.barcodeWarning++;}
+    if(x?.scientificNotation||y?.scientificNotation){parts.push("BARCODE FORMAT WARNING");z.barcodeWarning++;}
     if(!parts.length){parts.push("MATCHED");z.matched++;}
     rows.push([x?k:"",x&&y?text(y.stockNo):"",x&&y?text(y.color):"",x&&y?text(y.size):"",x?sq:"","",y?k:"",y?text(y.stockNo):"",y?text(y.color):"",y?text(y.size):"",y?bq:"","",sq-bq,0]);
     statuses.push(parts.join(" | "));
@@ -277,15 +293,14 @@ function makeWorkbook(result,scanner,bxi,store,sto){
       ws[ref].s={font:normal,alignment:{horizontal:"center",vertical:"center"},border:{top:thin,bottom:thin,left:thin,right:thin}};
     }
     for(const col of ["E","K","M","N"]){
-      if(ws[col+r]) { ws[col+r].s = Object.assign({}, ws[col+r].s || {}, {numFmt:"0"}); }
+      if(ws[col+r]) ws[col+r].s={...(ws[col+r].s||{}),numFmt:"0"};
     }
   }
 
   // Red fill only for non-zero Qty/UPC differences.
   for(let r=7;r<totalRow;r++){
-    const mCell=ws["M"+r], nCell=ws["N"+r];
-    const qty=Number(mCell && mCell.v != null ? mCell.v : 0);
-    const upc=Number(nCell && nCell.v != null ? nCell.v : 0);
+    const qty=Number(ws["M"+r]?.v ?? 0);
+    const upc=Number(ws["N"+r]?.v ?? 0);
     if(qty!==0){
       ws["M"+r].s={font:{name:"Arial",sz:10,bold:true,color:{rgb:"000000"}},fill:red,alignment:{horizontal:"center",vertical:"center"},border:{top:thin,bottom:thin,left:thin,right:thin},numFmt:"0"};
     }
@@ -315,13 +330,12 @@ function makeWorkbook(result,scanner,bxi,store,sto){
   for(let i=0;i<summary.length;i++){
     const r=i+1;
     cell("Q"+r,summary[i][0],{font:{name:"Arial",sz:10,bold:i===0},alignment:{horizontal:"left",vertical:"center"},border:{top:thin,bottom:thin,left:thin,right:thin}});
-    const summaryStyle={
+    cell("R"+r,summary[i][1],{
       font:{name:"Arial",sz:10,bold:i===0||i===1},
       alignment:{horizontal:"right",vertical:"center"},
-      border:{top:thin,bottom:thin,left:thin,right:thin}
-    };
-    if(typeof summary[i][1]==="number") summaryStyle.numFmt="0";
-    cell("R"+r,summary[i][1],summaryStyle);
+      border:{top:thin,bottom:thin,left:thin,right:thin},
+      ...(typeof summary[i][1]==="number"?{numFmt:"0"}:{})
+    });
   }
 
   ws["!merges"].push({s:{r:0,c:16},e:{r:0,c:17}});
@@ -357,7 +371,7 @@ function makeWorkbook(result,scanner,bxi,store,sto){
 }
 
 function send(res,code,headers,body){
-  const h=Object.assign({"Permissions-Policy":"loopback-network=(self)"},headers);
+  const h={"Permissions-Policy":"loopback-network=(self)",...headers};
   res.writeHead(code,h);
   res.end(body);
 }
@@ -387,7 +401,7 @@ function corsHeaders(req){
   const h={
     "Access-Control-Allow-Methods":"GET,POST,OPTIONS",
     "Access-Control-Allow-Headers":"Content-Type",
-    "Access-Control-Expose-Headers":"X-Scanner-File,X-BXI-File,X-Pairing-Summary"
+    "Access-Control-Expose-Headers":"X-Scanner-File,X-BXI-File,X-Pairing-Summary,X-CSV-File,X-CSV-Rows"
   };
   if(origin) h["Access-Control-Allow-Origin"]=origin;
   return {origin,h};
@@ -395,7 +409,7 @@ function corsHeaders(req){
 
 const server=http.createServer((req,res)=>{
   const {origin,h}=corsHeaders(req);
-  const send=(code,headers,body)=>{res.writeHead(code,Object.assign({},h,headers));res.end(body)};
+  const send=(code,headers,body)=>{res.writeHead(code,{...h,...headers});res.end(body)};
   if(req.method==="OPTIONS") return send(origin?204:403,{},"");
   if(!origin) return send(403,{"Content-Type":"application/json; charset=utf-8"},JSON.stringify({error:"Origin is not allowed."}));
   if(req.method==="GET" && req.url.split("?")[0]==="/health") {
@@ -418,8 +432,9 @@ const server=http.createServer((req,res)=>{
         if(!si||!bi||si.store!==bi.store||si.sto!==bi.sto) throw Error("Scanner/BXI filename validation failed.");
         const scanner=readScanner(path.join(sd,sf)),bxi=readBxi(path.join(bd,bf)),result=pair(bxi,scanner);
         const buffer=makeWorkbook(result,scanner,bxi,store,sto);
+        const csvResult=saveScannerCsv(scanner.records,store,sto);
         const summary=`STORE ${store} • STO# ${sto} • ${result.z.totalItems} barcodes • ${result.z.status}`;
-        return send(200,{"Content-Type":"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet","Content-Disposition":`attachment; filename="${store}_STO#${sto}.xlsx"`,"X-Scanner-File":encodeURIComponent(sf),"X-BXI-File":encodeURIComponent(bf),"X-Pairing-Summary":encodeURIComponent(summary),"Content-Length":buffer.length},buffer);
+        return send(200,{"Content-Type":"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet","Content-Disposition":`attachment; filename="${store}_STO#${sto}.xlsx"`,"X-Scanner-File":encodeURIComponent(sf),"X-BXI-File":encodeURIComponent(bf),"X-Pairing-Summary":encodeURIComponent(summary),"X-CSV-File":encodeURIComponent(csvResult.filename),"X-CSV-Rows":String(csvResult.rowCount),"Content-Length":buffer.length},buffer);
       }catch(e){return send(400,{"Content-Type":"application/json; charset=utf-8"},JSON.stringify({error:e.message||String(e)}));}
     });
     return;
